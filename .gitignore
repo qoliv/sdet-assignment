@@ -1,0 +1,23 @@
+# Artifacts
+artifacts/
+
+# Coverage reports
+coverage/
+*-junit.xml
+
+# Node modules
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*~

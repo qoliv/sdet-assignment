@@ -1,0 +1,10 @@
+node_modules/
+artifacts/
+.git/
+.github/
+*.md
+test/
+scripts/
+.dockerignore
+Dockerfile
+docker-compose.yml

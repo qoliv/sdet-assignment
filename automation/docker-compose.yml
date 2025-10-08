@@ -1,0 +1,77 @@
+services:
+  target_1:
+    build:
+      context: ..
+      dockerfile: automation/Dockerfile
+    container_name: target_1
+    hostname: target_1
+    command: node app.js target
+    volumes:
+      - target_1_data:/app
+      - ./artifacts/target_1_events.log:/app/events.log
+    healthcheck:
+      test: ["CMD", "nc", "-zv", "localhost", "9997"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+    networks:
+      - cribl_network
+
+  target_2:
+    build:
+      context: ..
+      dockerfile: automation/Dockerfile
+    container_name: target_2
+    hostname: target_2
+    command: node app.js target
+    volumes:
+      - target_2_data:/app
+      - ./artifacts/target_2_events.log:/app/events.log
+    healthcheck:
+      test: ["CMD", "nc", "-zv", "localhost", "9997"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+    networks:
+      - cribl_network
+
+  splitter:
+    build:
+      context: ..
+      dockerfile: automation/Dockerfile
+    container_name: splitter
+    hostname: splitter
+    command: node app.js splitter
+    depends_on:
+      target_1:
+        condition: service_healthy
+      target_2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nc", "-zv", "localhost", "9997"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+    networks:
+      - cribl_network
+
+  agent:
+    build:
+      context: ..
+      dockerfile: automation/Dockerfile
+    container_name: agent
+    hostname: agent
+    command: node app.js agent
+    depends_on:
+      splitter:
+        condition: service_healthy
+    networks:
+      - cribl_network
+
+volumes:
+  target_1_data:
+  target_2_data:
+
+networks:
+  cribl_network:
+    driver: bridge
