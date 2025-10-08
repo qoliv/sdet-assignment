@@ -1,6 +1,6 @@
 # Cribl SDET Assignment - Automated Testing
 
-![CI Status](https://github.com/qoramos/cribl-sdet-assignment/workflows/QA%20Automation/badge.svg)
+![CI Status](https://github.com/qoliv/sdet-assignment/workflows/Test%20Automation/badge.svg)
 
 This repository contains automated testing infrastructure for the Cribl data pipeline application, implementing the requirements from [Instructions.md](Instructions.md).
 
@@ -122,5 +122,6 @@ The application uses JSON configuration files (per [Instructions.md](Instruction
 - [`target/app.json`](target/app.json) - Target mode configuration
 - [`target/inputs.json`](target/inputs.json) - Listen port
 - [`target/outputs.json`](target/outputs.json) - Output file path
+
 
 **Note**: Configuration files are not modified per assignment requirements.
