@@ -10,6 +10,7 @@ interface Logger {
 }
 
 const DEFAULT_COMPOSE_COMMAND = "docker compose";
+const { readdir, rm: rmAsync } = fs.promises;
 
 interface ComposeExecutionConfig {
   composeCommand?: string;
@@ -65,33 +66,35 @@ function bringDown(
   }
 }
 
-export function cleanEnvironment(
+export async function cleanEnvironment(
   artifactsDir: string,
   targetFilenames: string[],
   logger: Logger = console,
   composeConfig: ComposeExecutionConfig = {},
   options: CleanEnvironmentOptions = {}
-): void {
+): Promise<void> {
   logger.log("Cleaning environment...");
   bringDown(logger, composeConfig);
 
   const preserve = new Set(options.preserve ?? []);
   if (preserve.size === 0) {
-    recreateDir(artifactsDir);
+    await recreateDir(artifactsDir);
   } else {
-    ensureDirExists(artifactsDir);
-    const entries = fs.readdirSync(artifactsDir);
-    entries.forEach((entry) => {
-      if (preserve.has(entry)) {
-        return;
-      }
+    await ensureDirExists(artifactsDir);
+    const entries = await readdir(artifactsDir);
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (preserve.has(entry)) {
+          return;
+        }
 
-      const entryPath = path.join(artifactsDir, entry);
-      fs.rmSync(entryPath, { recursive: true, force: true });
-    });
+        const entryPath = path.join(artifactsDir, entry);
+        await rmAsync(entryPath, { recursive: true, force: true });
+      })
+    );
   }
 
-  createEmptyFiles(artifactsDir, targetFilenames);
+  await createEmptyFiles(artifactsDir, targetFilenames);
 
   logger.log("Environment cleaned");
 }

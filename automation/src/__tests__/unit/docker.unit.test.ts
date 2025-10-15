@@ -15,6 +15,16 @@ jest.mock("child_process", () => ({
 }));
 
 const execSyncMock = execSync as ExecSyncMock;
+const { mkdtemp, mkdir, writeFile, rm, readFile, access } = fs.promises;
+
+async function pathExists(filepath: string): Promise<boolean> {
+  try {
+    await access(filepath, fs.constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 describe("docker utilities", () => {
   beforeEach(() => {
@@ -22,46 +32,46 @@ describe("docker utilities", () => {
     jest.useRealTimers();
   });
 
-  it("should clean the environment and prepare artifact targets", () => {
+  it("should clean the environment and prepare artifact targets", async () => {
     execSyncMock.mockReturnValue("");
 
-    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "docker-util-"));
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "docker-util-"));
     const artifactsDir = path.join(tempRoot, "artifacts");
-    fs.mkdirSync(artifactsDir, { recursive: true });
-    fs.writeFileSync(path.join(artifactsDir, "stale.log"), "stale");
+    await mkdir(artifactsDir, { recursive: true });
+    await writeFile(path.join(artifactsDir, "stale.log"), "stale");
 
     const logger = { log: jest.fn(), warn: jest.fn() };
 
     try {
-      cleanEnvironment(artifactsDir, ["target1.log", "target2.log"], logger);
+      await cleanEnvironment(artifactsDir, ["target1.log", "target2.log"], logger);
 
       expect(execSyncMock).toHaveBeenCalledWith(
         expect.stringContaining("docker compose down -v"),
         expect.objectContaining({ stdio: "inherit" })
       );
-      expect(fs.existsSync(path.join(artifactsDir, "target1.log"))).toBe(true);
-      expect(fs.existsSync(path.join(artifactsDir, "target2.log"))).toBe(true);
-      expect(fs.existsSync(path.join(artifactsDir, "stale.log"))).toBe(false);
-      expect(fs.readFileSync(path.join(artifactsDir, "target1.log"), "utf-8")).toBe("");
+      expect(await pathExists(path.join(artifactsDir, "target1.log"))).toBe(true);
+      expect(await pathExists(path.join(artifactsDir, "target2.log"))).toBe(true);
+      expect(await pathExists(path.join(artifactsDir, "stale.log"))).toBe(false);
+      expect(await readFile(path.join(artifactsDir, "target1.log"), "utf-8")).toBe("");
     } finally {
-      fs.rmSync(tempRoot, { recursive: true, force: true });
+      await rm(tempRoot, { recursive: true, force: true });
     }
   });
 
-  it("should preserve configured subdirectories while cleaning", () => {
+  it("should preserve configured subdirectories while cleaning", async () => {
     execSyncMock.mockReturnValue("");
 
-    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "docker-util-preserve-"));
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "docker-util-preserve-"));
     const artifactsDir = path.join(tempRoot, "artifacts");
     const runsDir = path.join(artifactsDir, "runs");
-    fs.mkdirSync(runsDir, { recursive: true });
-    fs.writeFileSync(path.join(runsDir, "keep.log"), "keep");
-    fs.writeFileSync(path.join(artifactsDir, "stale.log"), "stale");
+    await mkdir(runsDir, { recursive: true });
+    await writeFile(path.join(runsDir, "keep.log"), "keep");
+    await writeFile(path.join(artifactsDir, "stale.log"), "stale");
 
     const logger = { log: jest.fn(), warn: jest.fn() };
 
     try {
-      cleanEnvironment(
+      await cleanEnvironment(
         artifactsDir,
         ["target1.log", "target2.log"],
         logger,
@@ -69,12 +79,12 @@ describe("docker utilities", () => {
         { preserve: ["runs"] }
       );
 
-      expect(fs.existsSync(path.join(runsDir, "keep.log"))).toBe(true);
-      expect(fs.existsSync(path.join(artifactsDir, "stale.log"))).toBe(false);
-      expect(fs.existsSync(path.join(artifactsDir, "target1.log"))).toBe(true);
-      expect(fs.existsSync(path.join(artifactsDir, "runs"))).toBe(true);
+      expect(await pathExists(path.join(runsDir, "keep.log"))).toBe(true);
+      expect(await pathExists(path.join(artifactsDir, "stale.log"))).toBe(false);
+      expect(await pathExists(path.join(artifactsDir, "target1.log"))).toBe(true);
+      expect(await pathExists(path.join(artifactsDir, "runs"))).toBe(true);
     } finally {
-      fs.rmSync(tempRoot, { recursive: true, force: true });
+      await rm(tempRoot, { recursive: true, force: true });
     }
   });
 

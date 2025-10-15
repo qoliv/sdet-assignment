@@ -8,42 +8,54 @@ import {
 } from "../../validation";
 import * as fileUtils from "../../utils/files";
 
+const { mkdtemp, writeFile, readFile: readFileAsync, rm, access } = fs.promises;
+
+async function pathExists(filepath: string): Promise<boolean> {
+  try {
+    await access(filepath, fs.constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe("validation workflow", () => {
   let tempDir: string;
   let sourceFile: string;
   let target1File: string;
   let target2File: string;
 
-  beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "validation-test-"));
+  beforeEach(async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "validation-test-"));
     sourceFile = path.join(tempDir, "source.log");
     target1File = path.join(tempDir, "target-1.log");
     target2File = path.join(tempDir, "target-2.log");
     console.debug("Temp directory", tempDir);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    const exists = await pathExists(tempDir);
     const snapshot = {
       sourceFile,
       target1File,
       target2File,
-      exists: fs.existsSync(tempDir),
+      exists,
     };
 
-    if (snapshot.exists) {
-      const readFile = (filePath: string) =>
-        fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf-8") : null;
+    if (exists) {
+      const readFileIfPresent = async (filePath: string) =>
+        (await pathExists(filePath)) ? await readFileAsync(filePath, "utf-8") : null;
       Object.assign(snapshot, {
-        sourceContents: readFile(sourceFile),
-        target1Contents: readFile(target1File),
-        target2Contents: readFile(target2File),
+        sourceContents: await readFileIfPresent(sourceFile),
+        target1Contents: await readFileIfPresent(target1File),
+        target2Contents: await readFileIfPresent(target2File),
       });
     }
 
     try {
       console.debug("Validation temp files", snapshot);
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true });
       jest.restoreAllMocks();
       jest.useRealTimers();
     }
@@ -53,16 +65,18 @@ describe("validation workflow", () => {
     source: string,
     target1: string,
     target2: string
-  ): void {
-    fs.writeFileSync(sourceFile, source);
-    fs.writeFileSync(target1File, target1);
-    fs.writeFileSync(target2File, target2);
+  ): Promise<void> {
+    return Promise.all([
+      writeFile(sourceFile, source),
+      writeFile(target1File, target1),
+      writeFile(target2File, target2),
+    ]).then(() => undefined);
   }
 
-  it("should return line counts when data matches exactly", () => {
-    writePipelineFiles("line-1\nline-2\n", "line-1\n", "line-2\n");
+  it("should return line counts when data matches exactly", async () => {
+    await writePipelineFiles("line-1\nline-2\n", "line-1\n", "line-2\n");
 
-    const counts = validateDataIntegrity({
+    const counts = await validateDataIntegrity({
       sourceFile,
       target1File,
       target2File,
@@ -73,14 +87,14 @@ describe("validation workflow", () => {
     expect(counts).toEqual({ source: 2, target1: 1, target2: 1, total: 2 });
   });
 
-  it("should perform reconciliation when lines are shuffled", () => {
-    writePipelineFiles("line-1\nline-2\n", "line-2\n", "line-1\n");
+  it("should perform reconciliation when lines are shuffled", async () => {
+    await writePipelineFiles("line-1\nline-2\n", "line-2\n", "line-1\n");
 
     const warnSpy = jest
       .spyOn(console, "warn")
       .mockImplementation(() => undefined);
 
-    const counts = validateDataIntegrity({
+    const counts = await validateDataIntegrity({
       sourceFile,
       target1File,
       target2File,
@@ -93,28 +107,28 @@ describe("validation workflow", () => {
     expect(counts.total).toBe(2);
   });
 
-  it("should throw when reconciliation detects data loss", () => {
-    writePipelineFiles("line-1\nline-2\n", "line-1\n", "line-x\n");
+  it("should throw when reconciliation detects data loss", async () => {
+    await writePipelineFiles("line-1\nline-2\n", "line-1\n", "line-x\n");
 
-    expect(() =>
+    await expect(
       validateDataIntegrity({
         sourceFile,
         target1File,
         target2File,
       })
-    ).toThrow("Byte frequency reconciliation failed");
+    ).rejects.toThrow("Byte frequency reconciliation failed");
   });
 
-  it("should throw when line counts differ", () => {
-    writePipelineFiles("line-1\nline-2\n", "line-1\n", "line-2\nline-3\n");
+  it("should throw when line counts differ", async () => {
+    await writePipelineFiles("line-1\nline-2\n", "line-1\n", "line-2\nline-3\n");
 
-    expect(() =>
+    await expect(
       validateDataIntegrity({
         sourceFile,
         target1File,
         target2File,
       })
-    ).toThrow("Line count mismatch");
+    ).rejects.toThrow("Line count mismatch");
   });
 
   it("should validate distribution and throw when a target is empty", () => {

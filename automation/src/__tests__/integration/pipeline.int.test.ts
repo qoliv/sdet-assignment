@@ -32,6 +32,17 @@ const AGENT_INPUTS_DIR = path.join(WORKSPACE_ROOT, "application/agent/inputs");
 const AGENT_CONFIG_PATH = path.join(WORKSPACE_ROOT, "application/agent/inputs.json");
 const AGENT_CONFIG_BACKUP_PATH = `${AGENT_CONFIG_PATH}.backup`;
 
+const { access, readFile, writeFile, copyFile, rm } = fs.promises;
+
+async function pathExists(filepath: string): Promise<boolean> {
+  try {
+    await access(filepath, fs.constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 interface InputVariant {
   label: string;
   slug: string;
@@ -73,51 +84,52 @@ const INPUT_VARIANTS: InputVariant[] = [
   },
 ];
 
-function ensureFixtureExists(filename: string): void {
+async function ensureFixtureExists(filename: string): Promise<void> {
   const filepath = path.join(AGENT_INPUTS_DIR, filename);
-  if (!fs.existsSync(filepath)) {
+  if (!(await pathExists(filepath))) {
     throw new Error(`Fixture file not found: ${filepath}`);
   }
 }
 
-function updateAgentConfig(monitorRelativePath: string): void {
-  if (!fs.existsSync(AGENT_CONFIG_PATH)) {
+async function updateAgentConfig(monitorRelativePath: string): Promise<void> {
+  if (!(await pathExists(AGENT_CONFIG_PATH))) {
     throw new Error(`Agent inputs configuration not found: ${AGENT_CONFIG_PATH}`);
   }
 
-  const config = JSON.parse(fs.readFileSync(AGENT_CONFIG_PATH, "utf-8")) as Record<string, unknown>;
+  const rawConfig = await readFile(AGENT_CONFIG_PATH, "utf-8");
+  const config = JSON.parse(rawConfig) as Record<string, unknown>;
   config.monitor = monitorRelativePath;
-  fs.writeFileSync(AGENT_CONFIG_PATH, `${JSON.stringify(config, null, 4)}\n`);
+  await writeFile(AGENT_CONFIG_PATH, `${JSON.stringify(config, null, 4)}\n`);
 }
 
-function stageAgentInput(filename: string): void {
-  ensureFixtureExists(filename);
+async function stageAgentInput(filename: string): Promise<void> {
+  await ensureFixtureExists(filename);
   const monitorPath = path.posix.join("inputs", filename);
-  updateAgentConfig(monitorPath);
+  await updateAgentConfig(monitorPath);
 }
 
 const EVENT_LINE_REGEX = /^This is event number \d+$/;
 
 jest.setTimeout(600_000);
 
-beforeAll(() => {
-  if (!fs.existsSync(AGENT_CONFIG_PATH)) {
+beforeAll(async () => {
+  if (!(await pathExists(AGENT_CONFIG_PATH))) {
     throw new Error(`Agent inputs configuration not found: ${AGENT_CONFIG_PATH}`);
   }
 
-  fs.copyFileSync(AGENT_CONFIG_PATH, AGENT_CONFIG_BACKUP_PATH);
+  await copyFile(AGENT_CONFIG_PATH, AGENT_CONFIG_BACKUP_PATH);
 
-  if (fs.existsSync(ARTIFACTS_RUNS_DIR)) {
-    fs.rmSync(ARTIFACTS_RUNS_DIR, { recursive: true, force: true });
+  if (await pathExists(ARTIFACTS_RUNS_DIR)) {
+    await rm(ARTIFACTS_RUNS_DIR, { recursive: true, force: true });
   }
 
-  ensureDirExists(ARTIFACTS_RUNS_DIR);
+  await ensureDirExists(ARTIFACTS_RUNS_DIR);
 });
 
-afterAll(() => {
-  if (fs.existsSync(AGENT_CONFIG_BACKUP_PATH)) {
-    fs.copyFileSync(AGENT_CONFIG_BACKUP_PATH, AGENT_CONFIG_PATH);
-    fs.rmSync(AGENT_CONFIG_BACKUP_PATH);
+afterAll(async () => {
+  if (await pathExists(AGENT_CONFIG_BACKUP_PATH)) {
+    await copyFile(AGENT_CONFIG_BACKUP_PATH, AGENT_CONFIG_PATH);
+    await rm(AGENT_CONFIG_BACKUP_PATH);
   }
 });
 
@@ -128,8 +140,8 @@ describe.each(INPUT_VARIANTS)("data pipeline integration ($label)", ({ label, sl
   let sourceFile!: string;
 
   beforeAll(async () => {
-  cleanEnvironment(ARTIFACTS_DIR, [...TARGET_FILENAMES], console, {}, { preserve: ["runs"] });
-    stageAgentInput(filename);
+    await cleanEnvironment(ARTIFACTS_DIR, [...TARGET_FILENAMES], console, {}, { preserve: ["runs"] });
+    await stageAgentInput(filename);
     sourceFile = path.join(AGENT_INPUTS_DIR, filename);
     buildImages();
     startDeployment();
@@ -139,28 +151,28 @@ describe.each(INPUT_VARIANTS)("data pipeline integration ($label)", ({ label, sl
       { container: "target_2", filepath: "events.log", minimumBytes: 0 },
     ]);
 
-    resolvedTargets = assertFilesAvailable(ARTIFACTS_DIR, [...TARGET_FILENAMES]);
+    resolvedTargets = await assertFilesAvailable(ARTIFACTS_DIR, [...TARGET_FILENAMES]);
 
-    target1Lines = readLinesFromFile(resolvedTargets[TARGET_FILENAMES[0]]);
-    target2Lines = readLinesFromFile(resolvedTargets[TARGET_FILENAMES[1]]);
+    target1Lines = await readLinesFromFile(resolvedTargets[TARGET_FILENAMES[0]]);
+    target2Lines = await readLinesFromFile(resolvedTargets[TARGET_FILENAMES[1]]);
   });
 
-  afterAll(() => {
-    const combinedPath = collectArtifacts(ARTIFACTS_DIR, [...TARGET_FILENAMES], {
+  afterAll(async () => {
+    const combinedPath = await collectArtifacts(ARTIFACTS_DIR, [...TARGET_FILENAMES], {
       outputFilename: `combined_events_${slug}.log`,
     });
 
     const runDir = path.join(ARTIFACTS_RUNS_DIR, slug);
-    ensureDirExists(runDir);
+    await ensureDirExists(runDir);
 
-    TARGET_FILENAMES.forEach((targetFilename) => {
+    for (const targetFilename of TARGET_FILENAMES) {
       const sourcePath = resolvedTargets[targetFilename];
       const destPath = path.join(runDir, targetFilename);
-      fs.copyFileSync(sourcePath, destPath);
-    });
+      await copyFile(sourcePath, destPath);
+    }
 
     const combinedDest = path.join(runDir, path.basename(combinedPath));
-    fs.copyFileSync(combinedPath, combinedDest);
+    await copyFile(combinedPath, combinedDest);
 
     const metadata = {
       label,
@@ -171,7 +183,7 @@ describe.each(INPUT_VARIANTS)("data pipeline integration ($label)", ({ label, sl
       totalLines: target1Lines.length + target2Lines.length,
       generatedAt: new Date().toISOString(),
     };
-    fs.writeFileSync(
+    await writeFile(
       path.join(runDir, "metadata.json"),
       `${JSON.stringify(metadata, null, 2)}\n`
     );
@@ -179,8 +191,8 @@ describe.each(INPUT_VARIANTS)("data pipeline integration ($label)", ({ label, sl
     cleanContainers();
   });
 
-  it("should match line counts between source and targets", () => {
-    const lineCounts = validateDataIntegrity({
+  it("should match line counts between source and targets", async () => {
+    const lineCounts = await validateDataIntegrity({
       sourceFile,
       target1File: resolvedTargets[TARGET_FILENAMES[0]],
       target2File: resolvedTargets[TARGET_FILENAMES[1]],

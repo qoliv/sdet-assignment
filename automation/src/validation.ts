@@ -19,17 +19,21 @@ export interface ValidationOptions {
   logger?: Pick<typeof console, 'log' | 'warn'>;
 }
 
-export function validateDataIntegrity(
+const { readFile } = fs.promises;
+
+export async function validateDataIntegrity(
   paths: ValidationPaths,
   options: ValidationOptions = {}
-): LineCounts {
+): Promise<LineCounts> {
   const logger = options.logger ?? console;
 
   logger.log('Data Integrity Validation (Byte-Level)');
 
-  const sourceBuf = fs.readFileSync(paths.sourceFile);
-  const target1Buf = fs.readFileSync(paths.target1File);
-  const target2Buf = fs.readFileSync(paths.target2File);
+  const [sourceBuf, target1Buf, target2Buf] = await Promise.all([
+    readFile(paths.sourceFile),
+    readFile(paths.target1File),
+    readFile(paths.target2File),
+  ]);
 
   logger.log(`Source bytes: ${sourceBuf.length}`);
   logger.log(`Target-1 bytes: ${target1Buf.length}`);
@@ -37,9 +41,11 @@ export function validateDataIntegrity(
 
   logger.log('Performing byte multiset reconciliation.');
 
-  const sourceLines = readLinesFromFile(paths.sourceFile);
-  const target1Lines = readLinesFromFile(paths.target1File);
-  const target2Lines = readLinesFromFile(paths.target2File);
+  const [sourceLines, target1Lines, target2Lines] = await Promise.all([
+    readLinesFromFile(paths.sourceFile),
+    readLinesFromFile(paths.target1File),
+    readLinesFromFile(paths.target2File),
+  ]);
 
   const sourceLineCount = sourceLines.length;
   const newlineCountTargets = target1Lines.length + target2Lines.length;
