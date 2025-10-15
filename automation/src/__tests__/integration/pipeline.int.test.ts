@@ -108,8 +108,6 @@ async function stageAgentInput(filename: string): Promise<void> {
   await updateAgentConfig(monitorPath);
 }
 
-const EVENT_LINE_REGEX = /^This is event number \d+$/;
-
 jest.setTimeout(600_000);
 
 beforeAll(async () => {
@@ -214,22 +212,80 @@ describe.each(INPUT_VARIANTS)("data pipeline integration ($label)", ({ label, sl
     expect(lineCounts.source).toBe(lineCounts.target1 + lineCounts.target2);
   });
 
-  it("should produce correctly formatted events", () => {
-    const invalidPerTarget = TARGET_FILENAMES.map((filename, index) => {
-      const lines = index === 0 ? target1Lines : target2Lines;
-      return {
-        filename,
-        invalidLines: lines.filter((line) => !EVENT_LINE_REGEX.test(line)),
-      };
-    });
+  it("should transfer events without corruption or data loss", async () => {
+    const issues: string[] = [];
 
-    const flattenedInvalid = invalidPerTarget.flatMap(({ invalidLines }) => invalidLines);
-
-    if (flattenedInvalid.length > 0) {
-      console.error(`Invalid event lines detected [${label}]`, invalidPerTarget);
+    // Check 1: Verify all events are complete (no empty lines unless source is empty)
+    if (!allowEmpty || target1Lines.length > 0 || target2Lines.length > 0) {
+      TARGET_FILENAMES.forEach((filename, index) => {
+        const lines = index === 0 ? target1Lines : target2Lines;
+        lines.forEach((line, lineIndex) => {
+          if (line.length === 0) {
+            issues.push(`${filename}:${lineIndex + 1} - Empty line (potential truncation)`);
+          }
+        });
+      });
     }
 
-    expect(flattenedInvalid).toHaveLength(0);
+    // Check 2: Verify data integrity - all source events must appear in targets
+    const sourceLines = await readLinesFromFile(sourceFile);
+    const targetLines = [...target1Lines, ...target2Lines];
+    
+    // Build frequency maps for multiset comparison (handles duplicates correctly)
+    const sourceFreq = new Map<string, number>();
+    const targetFreq = new Map<string, number>();
+    
+    sourceLines.forEach(line => {
+      sourceFreq.set(line, (sourceFreq.get(line) || 0) + 1);
+    });
+    
+    targetLines.forEach(line => {
+      targetFreq.set(line, (targetFreq.get(line) || 0) + 1);
+    });
+
+    // Check for missing events
+    sourceFreq.forEach((count, line) => {
+      const targetCount = targetFreq.get(line) || 0;
+      if (targetCount < count) {
+        const preview = line.length > 50 ? `${line.substring(0, 50)}...` : line;
+        issues.push(`Event missing ${count - targetCount} occurrence(s) in targets: "${preview}"`);
+      }
+    });
+
+    // Check for extra events
+    targetFreq.forEach((count, line) => {
+      const sourceCount = sourceFreq.get(line) || 0;
+      if (count > sourceCount) {
+        const preview = line.length > 50 ? `${line.substring(0, 50)}...` : line;
+        issues.push(`Extra event with ${count - sourceCount} occurrence(s) not in source: "${preview}"`);
+      }
+    });
+
+    // Check 3: If events claim to be structured data, validate parseability
+    TARGET_FILENAMES.forEach((filename, index) => {
+      const lines = index === 0 ? target1Lines : target2Lines;
+      lines.forEach((line, lineIndex) => {
+        // Only validate if line appears to be JSON
+        const trimmed = line.trim();
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
+            (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+          try {
+            JSON.parse(line);
+          } catch {
+            issues.push(`${filename}:${lineIndex + 1} - Invalid JSON format`);
+          }
+        }
+      });
+    });
+
+    if (issues.length > 0) {
+      console.error(`Data transfer issues detected [${label}]`, issues.slice(0, 10));
+      if (issues.length > 10) {
+        console.error(`... and ${issues.length - 10} more issues`);
+      }
+    }
+
+    expect(issues).toHaveLength(0);
   });
 
   it("should contain only unique events across targets", () => {
