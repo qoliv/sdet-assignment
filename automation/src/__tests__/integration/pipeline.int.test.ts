@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import {
   cleanEnvironment,
-  buildImages,
+  buildImagesIfNeeded,
   startDeployment,
   waitForHealth,
   cleanContainers,
@@ -141,7 +141,7 @@ describe.each(INPUT_VARIANTS)("data pipeline integration ($label)", ({ label, sl
     await cleanEnvironment(ARTIFACTS_DIR, [...TARGET_FILENAMES], console, {}, { preserve: ["runs"] });
     await stageAgentInput(filename);
     sourceFile = path.join(AGENT_INPUTS_DIR, filename);
-    buildImages();
+    buildImagesIfNeeded();
     startDeployment();
     await waitForHealth();
     await waitForCompletion([

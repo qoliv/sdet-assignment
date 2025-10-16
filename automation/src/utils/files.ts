@@ -4,6 +4,9 @@ import crypto from 'crypto';
 
 const { access, readFile, writeFile, stat, mkdir, rm } = fs.promises;
 
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const DEFAULT_ARTIFACTS_DIR = path.join(PROJECT_ROOT, 'artifacts');
+
 export interface FileStats {
   bytes: number;
   lines: number;
@@ -123,4 +126,13 @@ export async function collectArtifacts(
   );
   await writeFile(combinedPath, combinedContent.join(''));
   return combinedPath;
+}
+
+export function getArtifactsDir(): string {
+  return DEFAULT_ARTIFACTS_DIR;
+}
+
+export async function ensureArtifactsDir(dirPath: string = DEFAULT_ARTIFACTS_DIR): Promise<string> {
+  await ensureDirExists(dirPath);
+  return dirPath;
 }

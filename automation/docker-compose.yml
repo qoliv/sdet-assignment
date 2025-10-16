@@ -65,6 +65,9 @@ services:
     depends_on:
       splitter:
         condition: service_healthy
+    volumes:
+      - ../application/agent:/app/agent:ro
+      - ../application/app.js:/app/app.js:ro
     networks:
       - cribl_network
 

@@ -12,6 +12,14 @@ interface Logger {
 const DEFAULT_COMPOSE_COMMAND = "docker compose";
 const { readdir, rm: rmAsync } = fs.promises;
 
+const PROJECT_NAME = "automation";
+const REQUIRED_IMAGES = [
+  `${PROJECT_NAME}-agent:latest`,
+  `${PROJECT_NAME}-splitter:latest`,
+  `${PROJECT_NAME}-target_1:latest`,
+  `${PROJECT_NAME}-target_2:latest`,
+] as const;
+
 interface ComposeExecutionConfig {
   composeCommand?: string;
   execOptions?: ExecSyncOptions;
@@ -106,6 +114,42 @@ export function buildImages(
   logger.log("Building Docker images...");
   runComposeStreaming("build", composeConfig);
   logger.log("Images built");
+}
+
+function listDockerImages(): string[] {
+  const output = run('docker images --format "{{.Repository}}:{{.Tag}}"');
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+export function areImagesBuilt(): boolean {
+  try {
+    const images = listDockerImages();
+    return REQUIRED_IMAGES.every((image) => images.includes(image));
+  } catch {
+    return false;
+  }
+}
+
+export function buildImagesIfNeeded(
+  logger: Logger = console,
+  composeConfig: ComposeExecutionConfig = {}
+): void {
+  if (process.env.DOCKER_IMAGES_BUILT === "true") {
+    logger.log("Docker images already flagged as built, skipping rebuild");
+    return;
+  }
+
+  if (areImagesBuilt()) {
+    logger.log("Docker images already available, skipping rebuild");
+    process.env.DOCKER_IMAGES_BUILT = "true";
+    return;
+  }
+
+  buildImages(logger, composeConfig);
+  process.env.DOCKER_IMAGES_BUILT = "true";
 }
 
 export function startDeployment(

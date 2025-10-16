@@ -9,6 +9,9 @@ const config: Config = {
   testTimeout: 600_000,
   collectCoverage: false,
   reporters: ['default'],
+  maxWorkers: 1,
+  globalSetup: '<rootDir>/jest.global-setup.ts',
+  globalTeardown: '<rootDir>/jest.global-teardown.ts',
 };
 
 export default config;

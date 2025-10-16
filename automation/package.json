@@ -6,11 +6,14 @@
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "cross-env JEST_JUNIT_OUTPUT_DIR=./test-results/unit/junit JEST_JUNIT_OUTPUT_NAME=unit-jest-junit.xml jest --runInBand --config jest.config.ts --coverage --coverageDirectory=./coverage/unit --reporters=default --reporters=jest-junit",
     "test:integration": "cross-env JEST_JUNIT_OUTPUT_DIR=./test-results/integration/junit JEST_JUNIT_OUTPUT_NAME=integration-jest-junit.xml jest --runInBand --config jest.integration.config.ts --reporters=default --reporters=jest-junit",
+    "test:integration:no-build": "cross-env DOCKER_IMAGES_BUILT=true JEST_JUNIT_OUTPUT_DIR=./test-results/integration/junit JEST_JUNIT_OUTPUT_NAME=integration-jest-junit.xml jest --runInBand --config jest.integration.config.ts --reporters=default --reporters=jest-junit",
     "clean": "docker compose down -v && bash -c 'rm -rf artifacts/'",
     "build": "docker compose build",
     "start": "docker compose up -d",
     "logs": "docker compose logs -f",
-    "stop": "docker compose down"
+    "stop": "docker compose down",
+    "docker:build": "ts-node -e \"require('./src/utils/docker').buildImages()\"",
+    "docker:clean": "ts-node -e \"require('./src/utils/docker').cleanContainers()\""
   },
   "author": "",
   "license": "ISC",
