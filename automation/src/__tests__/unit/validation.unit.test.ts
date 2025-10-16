@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Unit tests for data validation utilities.
+ * Tests byte-level integrity validation and distribution validation
+ * to ensure proper data transfer without loss or duplication.
+ * 
+ * @module __tests__/unit/validation
+ */
+
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -10,6 +18,9 @@ import * as fileUtils from "../../utils/files";
 
 const { mkdtemp, writeFile, readFile: readFileAsync, rm, access } = fs.promises;
 
+/**
+ * Checks if a file or directory exists.
+ */
 async function pathExists(filepath: string): Promise<boolean> {
   try {
     await access(filepath, fs.constants.F_OK);
@@ -19,12 +30,17 @@ async function pathExists(filepath: string): Promise<boolean> {
   }
 }
 
+/**
+ * Test suite for validation workflow functions.
+ * Tests data integrity checks and distribution validation.
+ */
 describe("validation workflow", () => {
   let tempDir: string;
   let sourceFile: string;
   let target1File: string;
   let target2File: string;
 
+  /** Setup: Create temporary directory for test files */
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "validation-test-"));
     sourceFile = path.join(tempDir, "source.log");
@@ -33,6 +49,7 @@ describe("validation workflow", () => {
     console.debug("Temp directory", tempDir);
   });
 
+  /** Teardown: Capture diagnostics and clean up temporary files */
   afterEach(async () => {
     const exists = await pathExists(tempDir);
     const snapshot = {
@@ -42,6 +59,7 @@ describe("validation workflow", () => {
       exists,
     };
 
+    // Capture file contents for debugging if they exist
     if (exists) {
       const readFileIfPresent = async (filePath: string) =>
         (await pathExists(filePath)) ? await readFileAsync(filePath, "utf-8") : null;
@@ -61,6 +79,9 @@ describe("validation workflow", () => {
     }
   });
 
+  /**
+   * Helper: Writes source and target files for pipeline simulation.
+   */
   function writePipelineFiles(
     source: string,
     target1: string,
@@ -73,6 +94,9 @@ describe("validation workflow", () => {
     ]).then(() => undefined);
   }
 
+  /**
+   * Test: Validates that correct line counts are returned when data matches exactly.
+   */
   it("should return line counts when data matches exactly", async () => {
     await writePipelineFiles("line-1\nline-2\n", "line-1\n", "line-2\n");
 
@@ -87,6 +111,10 @@ describe("validation workflow", () => {
     expect(counts).toEqual({ source: 2, target1: 1, target2: 1, total: 2 });
   });
 
+  /**
+   * Test: Validates that byte-level reconciliation succeeds even when line order changes.
+   * Should log a warning about ordering but still pass validation.
+   */
   it("should perform reconciliation when lines are shuffled", async () => {
     await writePipelineFiles("line-1\nline-2\n", "line-2\n", "line-1\n");
 
@@ -107,6 +135,9 @@ describe("validation workflow", () => {
     expect(counts.total).toBe(2);
   });
 
+  /**
+   * Test: Validates that data loss is detected via byte frequency reconciliation.
+   */
   it("should throw when reconciliation detects data loss", async () => {
     await writePipelineFiles("line-1\nline-2\n", "line-1\n", "line-x\n");
 
@@ -119,6 +150,9 @@ describe("validation workflow", () => {
     ).rejects.toThrow("Byte frequency reconciliation failed");
   });
 
+  /**
+   * Test: Validates that mismatched line counts are detected and reported.
+   */
   it("should throw when line counts differ", async () => {
     await writePipelineFiles("line-1\nline-2\n", "line-1\n", "line-2\nline-3\n");
 
@@ -131,6 +165,9 @@ describe("validation workflow", () => {
     ).rejects.toThrow("Line count mismatch");
   });
 
+  /**
+   * Test: Validates distribution check succeeds when both targets have data.
+   */
   it("should validate distribution and throw when a target is empty", () => {
     const validCounts: LineCounts = {
       source: 4,

@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Unit tests for data transfer completion monitoring.
+ * Tests file size polling and stabilization detection with mocked
+ * command execution and time progression.
+ * 
+ * @module __tests__/unit/waitForCompletion
+ */
+
 import { execSync } from "child_process";
 import { sleep } from "../../utils/time";
 import {
@@ -19,22 +27,37 @@ jest.mock("../../utils/time", () => ({
 const execSyncMock = execSync as ExecSyncMock;
 const sleepMock = sleep as SleepMock;
 
+/**
+ * Test suite for waitForCompletion utility function.
+ * Mocks Docker exec and time to test stabilization logic without
+ * requiring actual containers or waiting.
+ */
 describe("waitForCompletion utility", () => {
+  /** Setup: Reset all mocks before each test */
   beforeEach(() => {
     execSyncMock.mockReset();
     sleepMock.mockReset();
   });
 
+  /** Teardown: Restore all mocks */
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
+  /**
+   * Test: Validates input validation rejects empty target arrays.
+   */
   it("should throw when no targets are provided", async () => {
     await expect(waitForCompletion([])).rejects.toThrow(
       "At least one target must be provided"
     );
   });
 
+  /**
+   * Test: Validates stabilization detection and error recovery.
+   * Simulates file size changes and transient errors to verify
+   * the function waits for stable sizes before resolving.
+   */
   it("should resolve with stabilized sizes while reporting transient errors", async () => {
     let now = 0;
     const dateNowSpy = jest.spyOn(Date, "now").mockImplementation(() => now);

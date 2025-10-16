@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Unit tests for Docker utility functions.
+ * Tests environment cleanup, image building, and health check waiting
+ * with mocked command execution to avoid requiring Docker runtime.
+ * 
+ * @module __tests__/unit/docker
+ */
+
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -17,6 +25,9 @@ jest.mock("child_process", () => ({
 const execSyncMock = execSync as ExecSyncMock;
 const { mkdtemp, mkdir, writeFile, rm, readFile, access } = fs.promises;
 
+/**
+ * Checks if a file or directory exists.
+ */
 async function pathExists(filepath: string): Promise<boolean> {
   try {
     await access(filepath, fs.constants.F_OK);
@@ -26,12 +37,20 @@ async function pathExists(filepath: string): Promise<boolean> {
   }
 }
 
+/**
+ * Test suite for Docker utility functions.
+ * Mocks execSync to avoid requiring actual Docker runtime.
+ */
 describe("docker utilities", () => {
+  /** Reset mocks and timers before each test */
   beforeEach(() => {
     execSyncMock.mockReset();
     jest.useRealTimers();
   });
 
+  /**
+   * Test: Validates environment cleaning removes old files and creates empty targets.
+   */
   it("should clean the environment and prepare artifact targets", async () => {
     execSyncMock.mockReturnValue("");
 
@@ -58,6 +77,10 @@ describe("docker utilities", () => {
     }
   });
 
+  /**
+   * Test: Validates that preserved directories are kept during cleanup.
+   * Useful for keeping test run history across environment resets.
+   */
   it("should preserve configured subdirectories while cleaning", async () => {
     execSyncMock.mockReturnValue("");
 
@@ -88,6 +111,10 @@ describe("docker utilities", () => {
     }
   });
 
+  /**
+   * Test: Validates that custom Docker Compose commands are respected.
+   * Important for CI environments or custom Docker contexts.
+   */
   it("should honor a custom compose command when building images", () => {
     execSyncMock.mockReturnValue("");
     const logger = { log: jest.fn() };
@@ -100,6 +127,10 @@ describe("docker utilities", () => {
     );
   });
 
+  /**
+   * Test: Validates health check polling waits until services report healthy.
+   * Simulates progressive health check responses until "healthy" is found.
+   */
   it("should resolve once docker compose reports healthy services", async () => {
     jest.useFakeTimers();
 

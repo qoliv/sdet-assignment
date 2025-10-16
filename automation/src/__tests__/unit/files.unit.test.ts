@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Unit tests for file system utility functions.
+ * Tests directory management, file operations, line counting,
+ * and artifact collection without requiring actual pipeline execution.
+ * 
+ * @module __tests__/unit/files
+ */
+
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -15,6 +23,9 @@ import {
 
 const { mkdtemp, rm, readdir, writeFile, readFile, access } = fs.promises;
 
+/**
+ * Checks if a file or directory exists.
+ */
 async function pathExists(filepath: string): Promise<boolean> {
   try {
     await access(filepath, fs.constants.F_OK);
@@ -24,19 +35,26 @@ async function pathExists(filepath: string): Promise<boolean> {
   }
 }
 
+/**
+ * Test suite for file utility helper functions.
+ * Uses temporary directories to avoid affecting the actual file system.
+ */
 describe("file utility helpers", () => {
   let tempDir: string;
 
+  /** Setup: Create temporary directory for each test */
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "files-test-"));
   });
 
+  /** Teardown: Capture diagnostics and clean up temporary directory */
   afterEach(async () => {
     const snapshot = {
       tempDir,
       files: [] as string[],
     };
 
+    // Capture directory contents for debugging
     if (await pathExists(tempDir)) {
       try {
         const entries = await readdir(tempDir);
@@ -51,12 +69,18 @@ describe("file utility helpers", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
+  /**
+   * Test: Validates directory creation with nested paths (mkdir -p behavior).
+   */
   it("should create a directory when ensureDirExists is called on a missing path", async () => {
     const nested = path.join(tempDir, "nested");
     await ensureDirExists(nested);
     expect(await pathExists(nested)).toBe(true);
   });
 
+  /**
+   * Test: Validates file path resolution when all expected files exist.
+   */
   it("should return resolved file paths when all files are present", async () => {
     const filenames = ["alpha.log", "beta.log"];
     await Promise.all(
